@@ -1,0 +1,55 @@
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# --- 1. Başlık ve Dosya Yükleme ---
+st.set_page_config(page_title="Teknisyen Saat Analizi", layout="wide")
+st.title("🔧 Teknisyen Çalışma Saatleri Analizi")
+
+uploaded_file = st.file_uploader("Excel dosyasını yükleyin", type=["xlsx"])
+
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+
+    # --- 2. Temizleme ---
+    df = df.dropna(subset=['Teknisyen ID', 'Teknisyen İsmi', 'Tarih'])
+    df['Receiver order'] = df['Receiver order'].apply(lambda x: x if isinstance(x, str) and x.strip() else None)
+
+    # --- 3. Kod Eşleştirme ---
+    kod_tanimlari = {
+        "101": {"group": "Bakım", "ucretli": True},
+        "102": {"group": "Arıza", "ucretli": True},
+        "103": {"group": "Eğitim", "ucretli": False},
+        # Genişletilebilir...
+    }
+
+    df['Kod'] = df['Kod'].astype(str)
+    df['Grup'] = df['Kod'].map(lambda x: kod_tanimlari.get(x, {}).get('group', 'Bilinmeyen'))
+    df['Ücretli'] = df['Kod'].map(lambda x: kod_tanimlari.get(x, {}).get('ucretli', False))
+
+    # --- 4. Özet Bilgiler ---
+    st.subheader("📊 Özet Bilgiler")
+    toplam_saat = df['Saat'].sum()
+    ucretli_saat = df[df['Ücretli']]['Saat'].sum()
+    ucretsiz_saat = toplam_saat - ucretli_saat
+
+    st.metric("Toplam Saat", f"{toplam_saat:.1f}")
+    st.metric("Ücretli Saat", f"{ucretli_saat:.1f}")
+    st.metric("Ücretsiz Saat", f"{ucretsiz_saat:.1f}")
+
+    # --- 5. Görselleştirme ---
+    st.subheader("📈 Grup Bazlı Saat Dağılımı")
+    grup_saat = df.groupby('Grup')['Saat'].sum()
+
+    fig, ax = plt.subplots()
+    ax.pie(grup_saat, labels=grup_saat.index, autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')
+    st.pyplot(fig)
+
+    # --- 6. Dışa Aktarım ---
+    st.subheader("📤 Temizlenmiş Veriyi İndir")
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("CSV olarak indir", csv, "temizlenmis_veri.csv", "text/csv")
+
+else:
+    st.info("Lütfen bir Excel dosyası yükleyin.")
